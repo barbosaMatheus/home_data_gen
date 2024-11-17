@@ -3,6 +3,7 @@ Main file for home monitoring data gen project.
 Takes user args and runs/manages the generator.
 """
 import argparse
+from home_monitoring_data_gen import HomeMonitoringDataGen
 
 parser = argparse.ArgumentParser("Home Monitoring System Simulator and Data Generator")
 parser.add_argument("-n", "--name", dest="base_name", type=str, 
@@ -25,3 +26,8 @@ parser.add_argument("-f", "--fail", dest="fail_rate", type=float,
                     required=False, default=0.001)
 args = parser.parse_args()
 
+if __name__ == "__main__":
+    gen = HomeMonitoringDataGen(start_date=args.start_date, num_days=args.num_days,
+                                minor_cycle_len=args.minor_cycle_len, 
+                                temp_bias=args.temp_bias,
+                                sensor_fail_rate=args.fail_rate)

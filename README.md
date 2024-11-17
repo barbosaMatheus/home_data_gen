@@ -28,7 +28,14 @@ User Options
 
 Occupant Behavior
 ===============
-Occupants will take random walks through the house during the daytime, and some at night. They will go from room to room following a stochastic process.
+Occupants will take random walks through the house during the daytime, and some at night. For simplicity, these will be simulated by the door and motion sensors each having a chance of triggering $\kappa = \dfrac{n\beta}{86400000}$ where $n$ is the number of occupants and:
+
+| sensor | time of day | beta |
+|--------|-------------|------|
+| motion | day         | 24.0 |
+|        | night       | 4.0  |
+| door   | day         | 6.0  |
+|        | night       | 1.0  |
 
 Data Output
 ================
@@ -42,7 +49,7 @@ Data Output
 2. Door/Motion Sensors
     - Updates every 30 seconds, or when there is a door opening or motion detected by one of the sensors
     - Datetime stamp is in YYYYJJJ-SSSSS where YYYYJJJ is the Julian date and SSSSS is a zero-padded, 5-digit value representing the number of seconds since midnight
-    - The sensors report a voltage in units of milliVolts as an integer. Any value above 3100mV (3.1V) is considered a logic "1" or a detection by the sensor
+    - The sensors report a voltage in units of milliVolts as an integer. Any value at or above 3100mV (3.1V) is considered a logic "1" or a detection by the sensor. Values at or below 1800mV (1.8V) are considered logic "0" or no detection. In between values are undefined, these will be the values transmitted in between triggers and snapshots.
     - Data is grouped in a dataframe like so:
     
     | datetime      | sensor_id | voltage |
