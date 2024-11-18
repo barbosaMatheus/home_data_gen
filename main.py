@@ -14,6 +14,9 @@ parser.add_argument("-s", "--start", dest="start_date", type=str,
 parser.add_argument("-d", "--days", dest="num_days", type=int,
                     help="Number of days to simulate",
                     required=False, default=365)
+parser.add_argument("-o", "--occup", dest="num_occupants", type=int,
+                    help="Number of occupants in the home",
+                    required=False, default=365)
 parser.add_argument("-c", "--cycle", dest="minor_cycle_len", type=int,
                     help="minor cycle (min refresh rate) in milliseconds",
                     required=False, default=100)
@@ -28,6 +31,7 @@ args = parser.parse_args()
 
 if __name__ == "__main__":
     gen = HomeMonitoringDataGen(start_date=args.start_date, num_days=args.num_days,
+                                num_occupants=args.num_occupants,
                                 minor_cycle_len=args.minor_cycle_len, 
                                 temp_bias=args.temp_bias,
                                 sensor_fail_rate=args.fail_rate)
