@@ -2,7 +2,7 @@
 Input scrubbing utilities
 """
 import sys
-from datetime import date
+from datetime import datetime
 
 DEFAULT_FLOAT = 0.0
 DEFAULT_INT = 0
@@ -57,8 +57,8 @@ def scrub_date_str(x: str, default_x: str):
     else:
         default = default_x
     try:
-        start_date = date.fromisoformat(x)
+        start_date = datetime.fromisoformat(x)
     except ValueError:
-        start_date = date.fromisoformat(default)
+        start_date = datetime.fromisoformat(default)
     finally:
         return start_date

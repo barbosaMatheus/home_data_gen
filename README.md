@@ -3,7 +3,7 @@ Data simulator/generator which mocks a home monitoring system. Simulates data ou
 
 For simplicity, the house has 4 rooms, and is shaped like a "T". The bottom part of the "T" faces exactly South, the Sun always rises exactly in the East and sets exactly to the West. The Sun rises at 06\:00 and sets at 18\:00, it is directly overhead at 12\:00. The side of the house with the sun will have slightly warmer temperatures during the day, while both sides will have cooler temperatures at night.
 
-Smoke detectors will go off on chance based on a cadence of ten times per year. The chance will be calculated at every minor cycle. Given a minor cycle length (in milliseconds) of $m$, the chance of smoke alarm at every minor cycle will be $p = r \times 1.27e^{-10}$ based on year length of 365.25 days. The smoke alarm also goes off every $\lfloor \frac{20736000000}{r} \rfloor$ minor cycles for dead batteries.
+Smoke detectors will go off on chance based on a cadence of ten times per year. The chance will be calculated at every minor cycle. Given a minor cycle length (in milliseconds) of $m$, the chance of smoke alarm at every minor cycle will be $p = m \times 1.27 \times 10^{-10}$ based on year length of 365.25 days. The smoke alarm also goes off every $\lfloor \frac{20736000000}{m} \rfloor \pm \lfloor \frac{2592000000}{m}$ minor cycles for dead batteries.
 
 ![layout](https://github.com/user-attachments/assets/5459986f-93a2-4608-947b-ccf094617aa0)
 
@@ -85,7 +85,5 @@ Data Output
 | day      | Int(8)  |
 | hours    | Int(8)  |
 | minutes  | Int(8)  |
-| seconds  | Int(8)  |
-| millisec | Int(16) |
 | reason   | Char(4) |
    

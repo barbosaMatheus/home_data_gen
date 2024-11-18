@@ -4,15 +4,18 @@ Contains object that generates simulated home monitoring data
 import pandas as pd
 from input_scrubbing import *
 import datetime
-from components import __TempSensor__, __PassiveSensor__, __Co2Sensor__, __HumiditySensor__
+import os
+from components import __TempSensor__, __PassiveSensor__, __Co2Sensor__, __HumiditySensor__, __SmokeDetector__
 
 SUNRISE = "06:00:00"
 SUNSET = "18:00:00"
 YEAR_LEN_DAYS = 365.25
 START_TEMP_F = 70.0
-DOOR_MOTION_SENSOR_CYCLE = 30000
+DOOR_MOTION_SENSOR_CYCLE = 30_000
 CO2_SENSOR_CYCLE_DELAY = 150
 HUMIDITY_SENSOR_DELAY = 100
+TICKS_PER_DAY = 86_400_000
+TICK_SCALE = 1_000
 
 class HomeMonitoringDataGen():
     """
@@ -36,36 +39,41 @@ class HomeMonitoringDataGen():
         self.start_date = scrub_date_str(start_date_str, default_x="2024-06-15")
         self.num_days = scrub_pos_int(num_days, default_x=1000)
         self.num_occupants = scrub_pos_int(num_occupants, default_x=1)
-        self.minor_cycle = scrub_pos_int(minor_cycle_len, default_x=500)
+        self.minor_cycle_len = scrub_pos_int(minor_cycle_len, default_x=500)
         self.temp_bias = scrub_temp_f(temp_bias)
         self.sensor_fail_rate = scrub_proportion(x=sensor_fail_rate, default_x=0.0)
+        self.total_cycles = (TICKS_PER_DAY/self.minor_cycle_len)*self.num_days
         self.__is_built__ = False
 
     # build components
     def __build__(self, force=False):
         if not self.__is_built__ and not force:
+            # sensors list
+            self.sensors = {}
+
             # temp sensors
-            self.t1 = __TempSensor__(self.sensor_fail_rate, START_TEMP_F)
-            self.t2 = __TempSensor__(self.sensor_fail_rate, START_TEMP_F)
+            self.sensors["t1"] = __TempSensor__(self.sensor_fail_rate, START_TEMP_F)
+            self.sensors["t2"] = __TempSensor__(self.sensor_fail_rate, START_TEMP_F)
             
             # door sensors
-            self.d1 = __PassiveSensor__(DOOR_MOTION_SENSOR_CYCLE // self.minor_cycle, style="door")
-            self.d2 = __PassiveSensor__(DOOR_MOTION_SENSOR_CYCLE // self.minor_cycle, style="door")
-            self.d3 = __PassiveSensor__(DOOR_MOTION_SENSOR_CYCLE // self.minor_cycle, style="door")
+            self.sensors["d1"] = __PassiveSensor__(DOOR_MOTION_SENSOR_CYCLE // self.minor_cycle_len, style="door")
+            self.sensors["d2"] = __PassiveSensor__(DOOR_MOTION_SENSOR_CYCLE // self.minor_cycle_len, style="door")
+            self.sensors["d3"] = __PassiveSensor__(DOOR_MOTION_SENSOR_CYCLE // self.minor_cycle_len, style="door")
 
             # motion detectors
-            self.m1 = __PassiveSensor__(DOOR_MOTION_SENSOR_CYCLE // self.minor_cycle, style="motion")
-            self.m2 = __PassiveSensor__(DOOR_MOTION_SENSOR_CYCLE // self.minor_cycle, style="motion")
-            self.m3 = __PassiveSensor__(DOOR_MOTION_SENSOR_CYCLE // self.minor_cycle, style="motion")
+            self.sensors["m1"] = __PassiveSensor__(DOOR_MOTION_SENSOR_CYCLE // self.minor_cycle_len, style="motion")
+            self.sensors["m2"] = __PassiveSensor__(DOOR_MOTION_SENSOR_CYCLE // self.minor_cycle_len, style="motion")
+            self.sensors["m3"] = __PassiveSensor__(DOOR_MOTION_SENSOR_CYCLE // self.minor_cycle_len, style="motion")
 
             # CO2 sensor
-            self.c1 = __Co2Sensor__(CO2_SENSOR_CYCLE_DELAY, self.num_occupants)
+            self.sensors["c1"] = __Co2Sensor__(CO2_SENSOR_CYCLE_DELAY, self.num_occupants)
 
             # humidity sensor
-            self.h1 = __HumiditySensor__(HUMIDITY_SENSOR_DELAY)
+            self.sensors["h1"] = __HumiditySensor__(HUMIDITY_SENSOR_DELAY)
             
             # smoke detector
-            
+            self.sensors["s1"] = __SmokeDetector__(self.minor_cycle_len)
+
             # confirm build
             self.__is_built__ = True
 
@@ -81,3 +89,16 @@ class HomeMonitoringDataGen():
                 resets the components.
         """
         self.__build__(reset)
+        
+        filenames = {}
+        
+        tag = datetime.datetime.now().replace(" ","T").replace(":","_").replace(".","_")
+        topdir = f"{name}_{tag}"
+        if not os.path.isdir(topdir):
+            os.mkdir(topdir)
+        
+        self.current_datetime = self.start_date
+        for i in range(self.total_cycles):
+            print(f"Cycle {i}: {str(self.current_datetime)}")
+            self.current_datetime += datetime.timedelta(milliseconds=self.minor_cycle_len)
+            

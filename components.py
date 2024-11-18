@@ -8,10 +8,13 @@ from typing import Literal
 PASSIVE_SENSOR_STYLE = Literal["motion","door"]
 
 BAD_TEMP_F = -999999.0
-BAD_PPM = 99999
+BAD_PPM = 99_999
 OCCUPANT_PPM_SCALE = 100
 BAD_HUMIDITY = 999.999
 MAX_DEG_F_CHANGE_PER_MILLISEC = 1e-6
+TICKS_PER_ALRM_BATT_LIFE = 20_736_000_000
+TICKS_PER_ALRM_BATT_OFFSET = 2_592_000_000.0
+SMOKE_CHANCE_PER_TICK = 1.27e-10
 
 class __Sensor__(ABC):
     @abstractmethod
@@ -86,7 +89,7 @@ class __HumiditySensor__(__Sensor__):
         self.mean_humidity = mean_humidity
         self.std_humidity = std_humidity
 
-    def get_phumidity(self):
+    def get_humidity(self):
         base_val = int(np.random.normal(loc=self.mean_ppm, scale=self.std_ppm))
         if base_val < 0:
             base_val = 0
@@ -94,6 +97,28 @@ class __HumiditySensor__(__Sensor__):
 
     def sample(self, cycle: int):
         if (cycle % self.cycle_delays) == 0:
-            return self.get_phumidity()
+            return self.get_humidity()
         else:
             return BAD_HUMIDITY
+        
+class __SmokeDetector__(__Sensor__):
+    def __init__(self, minor_cycle_len: int):
+        self.minor_cycle_len = minor_cycle_len
+        self.smoke_chance = SMOKE_CHANCE_PER_TICK * minor_cycle_len
+        self.calc_battery_life()
+        self.cycles = 0
+
+    def calc_battery_life(self):
+        base = TICKS_PER_ALRM_BATT_LIFE / self.minor_cycle_len
+        offset = int(np.random.uniform(low=0.0, high=TICKS_PER_ALRM_BATT_OFFSET))
+        self.battery_life = base + offset
+    
+    def sample(self, _):
+        self.cycles += 1
+        status = {"battery_dead": False}
+        if self.cycles == self.battery_life:
+            status["battery_dead"] = True
+            self.calc_battery_life()
+            self.cycles = 0
+        status["smoke"] = np.random.random() <= self.smoke_chance
+        return status
