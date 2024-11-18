@@ -44,8 +44,22 @@ Data Output
     - Date in yyyy-mm-dd format (i.e.: "1995-02-01" for February 2, 1995)
     - Time in hh\:mm\:ss.SSS format (.i.e.: 17\:05:\15.500)
     - T1 outputs temperature value in units of Fahrenheit as a signed floating point value ranging from -100.0 to +250.0
-    - T2 outputs its value in two different packets, the first being the least significant word (LSW) and the second being the second being the MSW. When put together they form a [half-precision floating-point number](https://en.wikipedia.org/wiki/Half-precision_floating-point_format) These values will be stored as integers, but when correctly converted to half-precision they will represent Fahrenheit.
-      
+    - T2 outputs its value in four different packets in least significant word first (LSW-First) order. When put together they form a [half-precision floating-point number](https://en.wikipedia.org/wiki/Half-precision_floating-point_format) These values will be stored as integers, but when correctly converted to half-precision they will represent Fahrenheit.
+    - These will be in separate files named temperature_data.parquet called temp_data.parquet that will contain a dataframe similar to:
+
+    | datetime   | time           | sensor | packet_id | payload |
+    |------------|----------------|--------|-----------|---------|
+    | 1995-02-01 | 13\:46\:08.347 | T1     | T1P00     | 72.054  |
+    | 1995-02-01 | 13\:46\:08.347 | T2     | T2P00     | 0x83    |
+    | 1995-02-01 | 13\:46\:08.347 | T2     | T2P01     | 0x00    |
+    | 1995-02-01 | 13\:46\:08.347 | T2     | T2P10     | 0x90    |
+    | 1995-02-01 | 13\:46\:08.347 | T2     | T2P11     | 0x42    |
+    | 1995-02-01 | 13\:46\:08.847 | T1     | T1P00     | 72.061  |
+    | 1995-02-01 | 13\:46\:08.847 | T2     | T2P00     | 0x06    |
+    | 1995-02-01 | 13\:46\:08.847 | T2     | T2P01     | 0x01    |
+    | 1995-02-01 | 13\:46\:08.847 | T2     | T2P10     | 0x90    |
+    | 1995-02-01 | 13\:46\:08.847 | T2     | T2P11     | 0x42    |
+
 2. Door/Motion Sensors
     - Updates every 30 seconds, or when there is a door opening or motion detected by one of the sensors
     - Datetime stamp is in YYYYJJJ-SSSSS where YYYYJJJ is the Julian date and SSSSS is a zero-padded, 5-digit value representing the number of seconds since midnight
@@ -56,21 +70,21 @@ Data Output
     |---------------|-----------|---------|
     | 2017045-09205 | M1        | 4200    |
     | 2017045-09205 | D1        | 2600    |
-   
+
 3. Humidity/CO2 Sensors
     - These sensors plug into the same hub and collect their data together, but have staggered cycles
     - Humidity sensor updates every 100 minor cycles and CO2 sensor updates every 150 minor cycles
     - Humidity is zero-padded percentage, CO2 levels are zero-padded parts-per-million from 0 to 50,000
     - **NOTE:** Sensors values will report 999.999 or 99999 in between updates, but these are not the actual readings. They should be treated as "missing" or erroneous data
-    - Data is output as a string stream to a file in the following format YYYYMMMDDHHMMSS=AAA.aaa%BBBBBppm:
+    - Data is output as a string stream to a file (which will be compressed to save space) in the following format YYYYMMMDDHHMMSS=AAA.aaa%BBBBBppm:
     
     | YYYY | MMM   | DD  | HHMMSS | =         | AAA.aaa% | BBBBBppm |
     |------|-------|-----|--------|-----------|----------|----------|
     | year | month | day | time   | separator | humidity | CO2      |
 
-    - A file output may look like this:
+    - A file will be called co2_humidity_data.pkl and the contents once decompressed will look similar to this:
 ```
-2019Feb10150318=045.003%03014ppm2019Feb10150458=045.001%99999ppm2019Feb10150548=999.999%03017ppm2019Feb10150638=045.015%99999ppm
+2019Feb10150318=045.003%03014ppm2019Feb10150458=045.001%99999ppm2019Feb10150548=999.999%03017ppm2019Feb10150638=045.015%99999ppm...
 ```
 
 4. Smoke Detector
@@ -86,4 +100,3 @@ Data Output
 | hours    | Int(8)  |
 | minutes  | Int(8)  |
 | reason   | Char(4) |
-   

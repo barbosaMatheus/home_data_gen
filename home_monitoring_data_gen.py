@@ -5,10 +5,11 @@ import pandas as pd
 from input_scrubbing import *
 import datetime
 import os
-from components import __TempSensor__, __PassiveSensor__, __Co2Sensor__, __HumiditySensor__, __SmokeDetector__
+from components import __TempSensor__, __PassiveSensor__, __Co2Sensor__, __HumiditySensor__
+from components import __SmokeDetector__, PASSIVE_SENSOR_STYLE
 
-SUNRISE = "06:00:00"
-SUNSET = "18:00:00"
+SUNRISE_HOUR = 6
+SUNSET_HOUR = 18
 YEAR_LEN_DAYS = 365.25
 START_TEMP_F = 70.0
 DOOR_MOTION_SENSOR_CYCLE = 30_000
@@ -77,6 +78,9 @@ class HomeMonitoringDataGen():
             # confirm build
             self.__is_built__ = True
 
+    def get_sensor_kappa(self, style: PASSIVE_SENSOR_STYLE = "motion"):
+        return 24.0
+
     def start(self, name: str, reset: bool = False):
         """
         Starts the simulation process, with the option to reset,
@@ -88,17 +92,25 @@ class HomeMonitoringDataGen():
             reset (bool): if True, will force build the object, which
                 resets the components.
         """
+        # build and reset if needed
         self.__build__(reset)
-        
-        filenames = {}
-        
+                
+        # create the top directory and file names
         tag = datetime.datetime.now().replace(" ","T").replace(":","_").replace(".","_")
         topdir = f"{name}_{tag}"
+        door_motion_filepath = os.path.join(topdir, f"{name}_door_motion.parquet")
+        temp_data_filepath = os.path.join(topdir, f"{name}_temp_data.parquet")
+        co2_humidity_filepath = os.path.join(topdir, f"{name}_co2_humidity_data.pkl")
         if not os.path.isdir(topdir):
             os.mkdir(topdir)
         
+        # set start time
         self.current_datetime = self.start_date
+        # loop through all time steps
         for i in range(self.total_cycles):
             print(f"Cycle {i}: {str(self.current_datetime)}")
+            # advance the datetime stamp
             self.current_datetime += datetime.timedelta(milliseconds=self.minor_cycle_len)
-            
+            # loop through each sensor
+            for sensor_name, sensor in self.sensors.items():
+                pass
