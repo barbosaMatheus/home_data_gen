@@ -1,5 +1,5 @@
 # Home Monitoring System Simulator and Data Generator
-Data simulator/generator which mocks a home monitoring system. Simulates data output from a home monitoring system. The way the data is output is purposely non-uniform and convoluted across the different sensors. This is because the idea is to generate a potentially large dataset that can be used to demo a data engineering project where the data is aggregated efficiently and accurately through an EPL pipeline. Unless otherwise noted, files will be output in .parquet format due to the potential for the large size. 
+Data simulator/generator which mocks a home monitoring system. Simulates data output from a home monitoring system. The way the data is output is purposely non-uniform and convoluted across the different sensors. This is because the idea is to generate a potentially large dataset that can be used to demo a data engineering project where the data is aggregated efficiently and accurately through an EPL pipeline. Unless otherwise noted, files will be output in .parquet format due to the potential for the large size. Some files may have multiple iterations (i.e.: foo_file(1).parquet, foo_file(2).parquet) if the data becomes too large in RAM.
 
 For simplicity, the house has 4 rooms, and is shaped like a "T". The bottom part of the "T" faces exactly South, the Sun always rises exactly in the East and sets exactly to the West. The Sun rises at 06\:00 and sets at 18\:00, it is directly overhead at 12\:00. The side of the house with the sun will have slightly warmer temperatures during the day, while both sides will have cooler temperatures at night.
 
@@ -44,10 +44,10 @@ Data Output
     - Date in yyyy-mm-dd format (i.e.: "1995-02-01" for February 2, 1995)
     - Time in hh\:mm\:ss.SSS format (.i.e.: 17\:05:\15.500)
     - T1 outputs temperature value in units of Fahrenheit as a signed floating point value ranging from -100.0 to +250.0
-    - T2 outputs its value in four different packets in least significant word first (LSW-First) order. When put together they form a [half-precision floating-point number](https://en.wikipedia.org/wiki/Half-precision_floating-point_format) These values will be stored as integers, but when correctly converted to half-precision they will represent Fahrenheit.
-    - These will be in separate files named temperature_data.parquet called temp_data.parquet that will contain a dataframe similar to:
+    - T2 outputs its value in four different packets in least significant word first (LSW-First) order. When put together they form a [single-precision floating-point number](https://en.wikipedia.org/wiki/Single-precision_floating-point_format) These values will be stored as integers, but when correctly converted to single-precision they will represent Fahrenheit.
+    - These will be stored in a joint file named temperature_data.parquet that will contain a dataframe similar to:
 
-    | datetime   | time           | sensor | packet_id | payload |
+    | date       | time           | sensor | packet_id | payload |
     |------------|----------------|--------|-----------|---------|
     | 1995-02-01 | 13\:46\:08.347 | T1     | T1P00     | 72.054  |
     | 1995-02-01 | 13\:46\:08.347 | T2     | T2P00     | 0x83    |
@@ -64,6 +64,7 @@ Data Output
     - Updates every 30 seconds, or when there is a door opening or motion detected by one of the sensors
     - Datetime stamp is in YYYYJJJ-SSSSS where YYYYJJJ is the Julian date and SSSSS is a zero-padded, 5-digit value representing the number of seconds since midnight
     - The sensors report a voltage in units of milliVolts as an integer. Any value at or above 3100mV (3.1V) is considered a logic "1" or a detection by the sensor. Values at or below 1800mV (1.8V) are considered logic "0" or no detection. In between values are undefined, these will be the values transmitted in between triggers and snapshots.
+    - Data will be grouped and output to a file called temp_data.parquet
     - Data is grouped in a dataframe like so:
     
     | datetime      | sensor_id | voltage |
@@ -88,15 +89,12 @@ Data Output
 ```
 
 4. Smoke Detector
-    - Data is output to an MDB file
+    - Data is output to binary file called smoke_detector.bin
     - Collection of datetime stamps of when the smoke detector alarm went off and the reason
-    - Reason is a 4-character field where "SMKE" means smoke detected and "BATT" means dead battery
+    - Reason is a 1-character field where "S" means smoke detected and "B" means dead battery
+    - Will be stored in memory as an array but will be written out to a byte file name "smoke_detector_data.byte"
+    - The array, once decoded from bytes, may look like this:
 
-| Field    | Type    |
-|----------|---------|
-| year     | Int(64) |
-| month    | Int(4)  |
-| day      | Int(8)  |
-| hours    | Int(8)  |
-| minutes  | Int(8)  |
-| reason   | Char(4) |
+    [[<year_as_int64>,<month_as_int8>,<day_as_int8>,<hours_as_int8>,<minutes_as_int8>,<reason_as_char(1)>],
+     [<year_as_int64>,<month_as_int8>,<day_as_int8>,<hours_as_int8>,<minutes_as_int8>,<reason_as_char(1)>],
+     [<year_as_int64>,<month_as_int8>,<day_as_int8>,<hours_as_int8>,<minutes_as_int8>,<reason_as_char(1)>]...]

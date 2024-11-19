@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from typing import Literal
 
 PASSIVE_SENSOR_STYLE = Literal["motion","door"]
+SUNLIGHT_STATE = Literal["direct","indirect","night"]
 
 BAD_TEMP_F = -999999.0
 BAD_PPM = 99_999
@@ -26,7 +27,7 @@ class __TempSensor__(__Sensor__):
         self.fail_rate = fail_rate
         self.prev_temp = start_temp
     
-    def sample(self, delta_time: int):
+    def sample(self, delta_time: int, sunlight: SUNLIGHT_STATE, bias: float):
         # check fail rate first
         # note, fails do not update previous val
         if np.random.random_sample() <= self.fail_rate:

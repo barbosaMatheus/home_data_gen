@@ -1,12 +1,18 @@
 """
 Contains object that generates simulated home monitoring data
 """
-import pandas as pd
-from input_scrubbing import *
+# native imports
 import datetime
 import os
+
+# third party imports
+import numpy as np
+import pandas as pd
+
+# local imports
+from input_scrubbing import *
 from components import __TempSensor__, __PassiveSensor__, __Co2Sensor__, __HumiditySensor__
-from components import __SmokeDetector__, PASSIVE_SENSOR_STYLE
+from components import __SmokeDetector__, PASSIVE_SENSOR_STYLE, SUNLIGHT_STATE
 
 SUNRISE_HOUR = 6
 SUNSET_HOUR = 18
@@ -17,6 +23,8 @@ CO2_SENSOR_CYCLE_DELAY = 150
 HUMIDITY_SENSOR_DELAY = 100
 TICKS_PER_DAY = 86_400_000
 TICK_SCALE = 1_000
+MAX_DATAFRAME_SIZE = 100_000_000
+SMOKE_ARRAY_DTYPE = np.dtype("u8, u1, u1, u1, u1, U1")
 
 class HomeMonitoringDataGen():
     """
@@ -45,6 +53,10 @@ class HomeMonitoringDataGen():
         self.sensor_fail_rate = scrub_proportion(x=sensor_fail_rate, default_x=0.0)
         self.total_cycles = (TICKS_PER_DAY/self.minor_cycle_len)*self.num_days
         self.__is_built__ = False
+        self.temp_sensor_df = pd.DataFrame(columns=["date", "time", "sensor", "packet_id", "payload"])
+        self.passive_sensor_df = pd.DataFrame(columns=["datetime", "sensor_id", "voltage"])
+        self.humidity_co2_sensor_data = ""
+        self.smoke_detector_data = np.zeros(shape=(1,), dtype=SMOKE_ARRAY_DTYPE)
 
     # build components
     def __build__(self, force=False):
@@ -78,8 +90,55 @@ class HomeMonitoringDataGen():
             # confirm build
             self.__is_built__ = True
 
-    def get_sensor_kappa(self, style: PASSIVE_SENSOR_STYLE = "motion"):
-        return 24.0
+    # returns the sunlight state based on current time
+    # and sensor position
+    def __get_sunlight_state__(self, sensor_pos_east: bool) -> SUNLIGHT_STATE:
+        if self.current_datetime.hour >= SUNSET_HOUR:
+            return "night"
+        elif self.current_datetime.hour == 12:
+            return "indirect"
+        else:
+            sun_pos = ("east" if self.current_datetime.hour < 12 else 
+                       "west")
+            match (sensor_pos_east, sun_pos):
+                case (False, "east"):
+                    return "indirect"
+                case (False, "west"):
+                    return "direct"
+                case (True, "east"):
+                    return "direct"
+                case (False, "east"):
+                    return "indirect"
+                
+    # returns factor used to calculate certain sensors'
+    # chances of triggering
+    def __get_sensor_kappa__(self, style: PASSIVE_SENSOR_STYLE = "motion"):
+        sundown = self.current_datetime.hour > SUNSET_HOUR
+        match (style, sundown):
+            case ("motion", False): # motion sensor during the day
+                return 24.0
+            case ("motion", True):  # motion sensor during the night
+                return 6.0
+            case ("door", False):   # door sensor during the day
+                return 4.0
+            case ("door", True):    # door sensor during the night
+                return 1.0
+
+    def process_temp_sensor(self, sensor, sensor_name: str, ieee_encoded: bool = False):
+        sunlight_state = self.__get_sunlight_state__(sensor_pos_east=(sensor_name == "t2"))
+        # sample the sensor
+        temp = (__TempSensor__)(sensor).sample(self.minor_cycle_len, 
+                                               sunlight_state, self.temp_bias)
+        #
+        # TODO: store the data
+
+
+    def process_passive_sensor(self, sensor):
+        # get kappa
+        kappa = self.__get_sensor_kappa__((__PassiveSensor__)(sensor).style)
+        # sample the sensor
+        voltage = (__PassiveSensor__)(sensor).sample(kappa)
+        # TODO: store the data
 
     def start(self, name: str, reset: bool = False):
         """
@@ -95,14 +154,17 @@ class HomeMonitoringDataGen():
         # build and reset if needed
         self.__build__(reset)
                 
-        # create the top directory and file names
+        # create the top directory
         tag = datetime.datetime.now().replace(" ","T").replace(":","_").replace(".","_")
         topdir = f"{name}_{tag}"
-        door_motion_filepath = os.path.join(topdir, f"{name}_door_motion.parquet")
-        temp_data_filepath = os.path.join(topdir, f"{name}_temp_data.parquet")
-        co2_humidity_filepath = os.path.join(topdir, f"{name}_co2_humidity_data.pkl")
         if not os.path.isdir(topdir):
             os.mkdir(topdir)
+
+        # create data file names
+        door_motion_filepath = os.path.join(topdir, f"{name}_door_motion(1).parquet")
+        temp_data_filepath = os.path.join(topdir, f"{name}_temp_data(1).parquet")
+        co2_humidity_filepath = os.path.join(topdir, f"{name}_co2_humidity_data(1).pkl")
+        smoke_detector_filepath = os.path.join(topdir, f"{name}_smoke_detector_data(1).byte")
         
         # set start time
         self.current_datetime = self.start_date
@@ -113,4 +175,10 @@ class HomeMonitoringDataGen():
             self.current_datetime += datetime.timedelta(milliseconds=self.minor_cycle_len)
             # loop through each sensor
             for sensor_name, sensor in self.sensors.items():
-                pass
+                # process temperature sensors
+                if sensor_name.startswith("t"):
+                    self.process_temp_sensor(sensor, 
+                                             ieee_encoded=(sensor_name.isin(("t2",))))
+                # process motion and door sensors
+                elif sensor_name.startswith("m") or sensor_name.startswith("d"):
+                    self.process_passive_sensor(sensor)
