@@ -24,6 +24,8 @@ HUMIDITY_SENSOR_DELAY = 100
 TICKS_PER_DAY = 86_400_000
 TICK_SCALE = 1_000
 MAX_DATAFRAME_SIZE = 100_000_000
+MAX_STRING_SIZE = 10_000_000
+MAX_ARRAY_SIZE = 10_000_000
 SMOKE_ARRAY_DTYPE = np.dtype("u8, u1, u1, u1, u1, U1")
 
 class HomeMonitoringDataGen():
@@ -56,7 +58,7 @@ class HomeMonitoringDataGen():
         self.temp_sensor_df = pd.DataFrame(columns=["date", "time", "sensor", "packet_id", "payload"])
         self.passive_sensor_df = pd.DataFrame(columns=["datetime", "sensor_id", "voltage"])
         self.humidity_co2_sensor_data = ""
-        self.smoke_detector_data = np.zeros(shape=(1,), dtype=SMOKE_ARRAY_DTYPE)
+        self.smoke_detector_data = np.array([], dtype=SMOKE_ARRAY_DTYPE)
 
     # build components
     def __build__(self, force=False):
@@ -65,8 +67,10 @@ class HomeMonitoringDataGen():
             self.sensors = {}
 
             # temp sensors
-            self.sensors["t1"] = __TempSensor__(self.sensor_fail_rate, START_TEMP_F)
-            self.sensors["t2"] = __TempSensor__(self.sensor_fail_rate, START_TEMP_F)
+            sunlight_state = self.__get_sunlight_state__(sensor_pos_east=False)
+            self.sensors["t1"] = __TempSensor__(self.sensor_fail_rate, START_TEMP_F, sunlight_state, self.temp_bias)
+            sunlight_state = self.__get_sunlight_state__(sensor_pos_east=True)
+            self.sensors["t2"] = __TempSensor__(self.sensor_fail_rate, START_TEMP_F, sunlight_state, self.temp_bias)
             
             # door sensors
             self.sensors["d1"] = __PassiveSensor__(DOOR_MOTION_SENSOR_CYCLE // self.minor_cycle_len, style="door")
@@ -78,11 +82,11 @@ class HomeMonitoringDataGen():
             self.sensors["m2"] = __PassiveSensor__(DOOR_MOTION_SENSOR_CYCLE // self.minor_cycle_len, style="motion")
             self.sensors["m3"] = __PassiveSensor__(DOOR_MOTION_SENSOR_CYCLE // self.minor_cycle_len, style="motion")
 
-            # CO2 sensor
-            self.sensors["c1"] = __Co2Sensor__(CO2_SENSOR_CYCLE_DELAY, self.num_occupants)
-
             # humidity sensor
             self.sensors["h1"] = __HumiditySensor__(HUMIDITY_SENSOR_DELAY)
+
+            # CO2 sensor
+            self.sensors["c1"] = __Co2Sensor__(CO2_SENSOR_CYCLE_DELAY, self.num_occupants)
             
             # smoke detector
             self.sensors["s1"] = __SmokeDetector__(self.minor_cycle_len)
@@ -124,21 +128,70 @@ class HomeMonitoringDataGen():
             case ("door", True):    # door sensor during the night
                 return 1.0
 
-    def process_temp_sensor(self, sensor, sensor_name: str, ieee_encoded: bool = False):
-        sunlight_state = self.__get_sunlight_state__(sensor_pos_east=(sensor_name == "t2"))
+    def __process_temp_sensor__(self, sensor, sensor_name: str, ieee_encoded: bool = False):
         # sample the sensor
-        temp = (__TempSensor__)(sensor).sample(self.minor_cycle_len, 
-                                               sunlight_state, self.temp_bias)
-        #
+        temp = (__TempSensor__)(sensor).sample(self.minor_cycle_len)
+        # TODO: encode data
         # TODO: store the data
+        # TODO: check for data size
 
-
-    def process_passive_sensor(self, sensor):
+    def __process_passive_sensor__(self, sensor):
         # get kappa
         kappa = self.__get_sensor_kappa__((__PassiveSensor__)(sensor).style)
         # sample the sensor
         voltage = (__PassiveSensor__)(sensor).sample(kappa)
+        # TODO: encode data
         # TODO: store the data
+        # TODO: check for data size
+
+    def __process_humidity_co2_sensor__(self, sensor, sensor_name: str, cycle: int):
+        # read the value (same for both)
+        sensor_reading = sensor.sample(cycle)
+        # format for record: YYYYMMMDDhhmmss=xxx.xxx%yyyyyppm
+        # humidity sensor we need to record the datetime stamp
+        if sensor_name.startswith("h"):
+            self.humidity_co2_sensor_data += self.current_datetime.strftime("%Y%b%d%H%M%S")
+            self.humidity_co2_sensor_data += f"{sensor_reading:.3f}%"
+        # co2 sensor we onlt record the value
+        elif sensor_name.startswith("c"):
+            self.humidity_co2_sensor_data += f"{sensor_reading:03}ppm"
+        
+        # TODO: check for data size
+
+    def __process_smoke_detector_data__(self, sensor):
+        status = (__SmokeDetector__)(sensor).sample()
+        # alarm went off for dead battery
+        if status["battery_dead"]:
+            self.smoke_detector_data = np.append(self.smoke_detector_data, 
+                                                 np.array((self.current_datetime.year,
+                                                           self.current_datetime.month,
+                                                           self.current_datetime.day,
+                                                           self.current_datetime.hour,
+                                                           self.current_datetime.minute,'B'), 
+                                                           dtype=SMOKE_ARRAY_DTYPE))
+        # alarm went off for smoke
+        if status["smoke"]:
+            self.smoke_detector_data = np.append(self.smoke_detector_data, 
+                                                 np.array((self.current_datetime.year,
+                                                           self.current_datetime.month,
+                                                           self.current_datetime.day,
+                                                           self.current_datetime.hour,
+                                                           self.current_datetime.minute,'S'), 
+                                                           dtype=SMOKE_ARRAY_DTYPE))
+        # TODO: check for array size
+
+    def __advance_time__(self):
+        prev_hour = self.current_datetime.hour
+        self.current_datetime += datetime.timedelta(milliseconds=self.minor_cycle_len)
+        next_hour = self.current_datetime.hour
+        # if going from day to night
+        if (prev_hour > SUNRISE_HOUR) and (prev_hour < SUNSET_HOUR) and (next_hour >= SUNSET_HOUR):
+            for sensor_name in ("t1","t2"):
+                self.sensors[sensor_name].night_cycle()
+        # if going from night to day
+        elif ((prev_hour > SUNSET_HOUR) or (prev_hour < SUNRISE_HOUR)) and (next_hour >= SUNRISE_HOUR):
+            for sensor_name in ("t1","t2"):
+                self.sensors[sensor_name].day_cycle()
 
     def start(self, name: str, reset: bool = False):
         """
@@ -172,13 +225,21 @@ class HomeMonitoringDataGen():
         for i in range(self.total_cycles):
             print(f"Cycle {i}: {str(self.current_datetime)}")
             # advance the datetime stamp
-            self.current_datetime += datetime.timedelta(milliseconds=self.minor_cycle_len)
+            self.__advance_time__()
             # loop through each sensor
             for sensor_name, sensor in self.sensors.items():
                 # process temperature sensors
                 if sensor_name.startswith("t"):
-                    self.process_temp_sensor(sensor, 
-                                             ieee_encoded=(sensor_name.isin(("t2",))))
+                    self.__process_temp_sensor__(sensor, 
+                                                ieee_encoded=(sensor_name.isin(("t2",))))
                 # process motion and door sensors
                 elif sensor_name.startswith("m") or sensor_name.startswith("d"):
-                    self.process_passive_sensor(sensor)
+                    self.__process_passive_sensor__(sensor)
+
+                # process humidity and CO2 sensors
+                elif sensor_name.startswith("h") or sensor_name.startswith("c"):
+                    self.__process_humidity_co2_sensor__(sensor, sensor_name, i)
+                
+                # process smoke detector
+                elif sensor_name.startswith("s"):
+                    self.__process_smoke_detector_data__(sensor)

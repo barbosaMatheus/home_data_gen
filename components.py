@@ -23,24 +23,45 @@ class __Sensor__(ABC):
         pass
 
 class __TempSensor__(__Sensor__):
-    def __init__(self, fail_rate: float, start_temp: float):
+    def __init__(self, fail_rate: float, start_temp: float, sunlight: SUNLIGHT_STATE, bias: float):
         self.fail_rate = fail_rate
         self.prev_temp = start_temp
+        self.bias = bias
+        # offset start temp for sun position
+        offset = 0
+        match sunlight:
+            case "direct":
+                offset = bias
+            case "indirect":
+                offset = 0
+            case "night":
+                offset = -1*bias
+        self.prev_temp += offset
     
-    def sample(self, delta_time: int, sunlight: SUNLIGHT_STATE, bias: float):
+    def night_cycle(self):
+        self.prev_temp -= self.bias
+
+    def day_cycle(self):
+        self.prev_temp += self.bias
+
+    def sample(self, delta_time: int):
         # check fail rate first
         # note, fails do not update previous val
         if np.random.random_sample() <= self.fail_rate:
             # if fails, 50/50 chance for bad read or NaN
-            if np.random.random_sample <= 0.5:
+            if np.random.random_sample() <= 0.5:
                 return np.nan
             else:
                 return BAD_TEMP_F
+        
         # if no fail, get random sample change from previous temp
         else:
+            # calculate change
             max_abs_change = delta_time * MAX_DEG_F_CHANGE_PER_MILLISEC
             temp_change = np.random.uniform(low=-1.0*max_abs_change, 
                                             high=max_abs_change)
+            
+            # accumulate change
             next_temp = self.prev_temp + temp_change
             self.prev_temp = next_temp
             return next_temp
@@ -75,7 +96,7 @@ class __Co2Sensor__(__Sensor__):
         if base_val < 0:
             base_val = 0
         occupant_shift = np.random.choice(self.n_occupants+1)*OCCUPANT_PPM_SCALE
-        return base_val + occupant_shift
+        return int(base_val + occupant_shift)
 
     def sample(self, cycle: int):
         if (cycle % self.cycle_delays) == 0:
@@ -91,7 +112,7 @@ class __HumiditySensor__(__Sensor__):
         self.std_humidity = std_humidity
 
     def get_humidity(self):
-        base_val = int(np.random.normal(loc=self.mean_ppm, scale=self.std_ppm))
+        base_val = np.random.normal(loc=self.mean_humidity, scale=self.std_humidity)
         if base_val < 0:
             base_val = 0
         return base_val
@@ -114,9 +135,9 @@ class __SmokeDetector__(__Sensor__):
         offset = int(np.random.uniform(low=0.0, high=TICKS_PER_ALRM_BATT_OFFSET))
         self.battery_life = base + offset
     
-    def sample(self, _):
+    def sample(self):
         self.cycles += 1
-        status = {"battery_dead": False}
+        status = {"battery_dead": False, "smoke": False}
         if self.cycles == self.battery_life:
             status["battery_dead"] = True
             self.calc_battery_life()
