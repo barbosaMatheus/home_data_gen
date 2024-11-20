@@ -14,7 +14,7 @@ OCCUPANT_PPM_SCALE = 100
 BAD_HUMIDITY = 999.999
 MAX_DEG_F_CHANGE_PER_MILLISEC = 1e-6
 TICKS_PER_ALRM_BATT_LIFE = 20_736_000_000
-TICKS_PER_ALRM_BATT_OFFSET = 2_592_000_000.0
+TICKS_PER_ALRM_BATT_OFFSET = 2_592_000_000
 SMOKE_CHANCE_PER_TICK = 1.27e-10
 LOGIC_ONE_MV_MIN = 3100
 LOGIC_ZERO_MV_MAX = 1800
@@ -25,6 +25,8 @@ class __Sensor__(ABC):
     @abstractmethod
     def sample(self, _):
         pass
+    def seed(self, seed_val):
+        np.random.seed(seed_val)
 
 class __TempSensor__(__Sensor__):
     def __init__(self, fail_rate: float, start_temp: float, sunlight: SUNLIGHT_STATE, bias: float):
@@ -147,8 +149,9 @@ class __SmokeDetector__(__Sensor__):
 
     def __calc_battery_life__(self):
         base = TICKS_PER_ALRM_BATT_LIFE / self.minor_cycle_len
-        offset = int(np.random.uniform(low=0.0, high=TICKS_PER_ALRM_BATT_OFFSET))
-        self.battery_life = base + offset
+        offset_high = TICKS_PER_ALRM_BATT_OFFSET / self.minor_cycle_len
+        offset = np.random.uniform(low=0.0, high=offset_high)
+        self.battery_life = int(base + offset)
     
     def sample(self):
         self.cycles += 1

@@ -1,7 +1,7 @@
 import sys
 sys.path.append("../")
 import numpy as np
-from components import __TempSensor__, __PassiveSensor__, __Co2Sensor__, __HumiditySensor__
+from components import __TempSensor__, __PassiveSensor__, __Co2Sensor__, __HumiditySensor__, __SmokeDetector__
 from components import BAD_TEMP_F, LOGIC_ZERO_MV_MAX, LOGIC_ONE_MV_MIN, BAD_PPM, OCCUPANT_PPM_SCALE, BAD_HUMIDITY
 
 # grouping tests for temp sensor
@@ -12,6 +12,7 @@ class TestTempSensor():
         # setup the test
         sensor = __TempSensor__(fail_rate=0.75, start_temp=100.0, 
                                 sunlight="indirect", bias=0.0)
+        sensor.seed(123)
         n = 100
         samples = []
 
@@ -30,6 +31,7 @@ class TestTempSensor():
         # setup the test
         sensor = __TempSensor__(fail_rate=0.0001, start_temp=100.0,
                                 sunlight="indirect", bias=0.0)
+        sensor.seed(123)
         n = 100
         samples = []
 
@@ -51,8 +53,10 @@ class TestTempSensor():
         bias = 1.0
         sensor1 = __TempSensor__(fail_rate=0.0001, start_temp=100.0, 
                                 sunlight="direct", bias=bias)
+        sensor1.seed(123)
         sensor2 = __TempSensor__(fail_rate=0.0001, start_temp=100.0, 
                                 sunlight="indirect", bias=bias)
+        sensor2.seed(123)
         n = 100
         samples1 = []
         samples2 = []
@@ -82,6 +86,7 @@ class TestPassiveSensor():
         kappa = 24 / 86400000 # 24 times per day
         expected_readings = n // ppc
         sensor = __PassiveSensor__(ppc, "motion")
+        sensor.seed(123)
         values = []
 
         # run n samples
@@ -102,6 +107,7 @@ class TestPassiveSensor():
         kappa = 0.75
         expected_readings = n // ppc
         sensor = __PassiveSensor__(ppc, "door")
+        sensor.seed(123)
         values = []
 
         # run n samples
@@ -122,6 +128,7 @@ class TestPassiveSensor():
         kappa = 0.02
         expected_readings = n // ppc
         sensor = __PassiveSensor__(ppc, "door")
+        sensor.seed(123)
         values = []
 
         # run n samples
@@ -142,6 +149,7 @@ class TestCo2Sensor():
         # set up test
         delay = 10
         sensor = __Co2Sensor__(delay, 1)
+        sensor.seed(123)
         n = 100
         expected_readings = n // delay
         expected_flags = n - expected_readings
@@ -165,6 +173,7 @@ class TestCo2Sensor():
         delay = 10
         occupants = 2
         sensor = __Co2Sensor__(delay, occupants, 0.0, 0.0)
+        sensor.seed(123)
         n = 100
         values = []
 
@@ -186,6 +195,7 @@ class TestHumiditySensor():
         # set up test
         delay = 20
         sensor = __HumiditySensor__(delay)
+        sensor.seed(123)
         n = 1000
         expected_readings = n // delay
         expected_flags = n - expected_readings
@@ -200,3 +210,47 @@ class TestHumiditySensor():
         # check that the proportion of readings is correct
         assert ((len(readings) == expected_readings) and 
                 (len(flags) == expected_flags))
+        
+# grouping for smoke detector tests
+class TestSmokeDetector():
+    # set up a smoke detector and give it a high chance of
+    # having the alarm go off so we can test the functionality
+    def test_smoke_detector_smoke_alarm(self):
+        # set up the test
+        cycle_len = 1e9 # this gives us a chance of smoke about 1/10 cycles
+        sensor = __SmokeDetector__(cycle_len)
+        sensor.seed(123)
+        n = 100
+        smoke_events_low = 5
+        smoke_events_high = 15
+        smoke_events = 0
+
+        # run n samples
+        for _ in range(n):
+            status = sensor.sample()
+            if status["smoke"]:
+                smoke_events += 1
+        
+        # make sure the number of smoke events is within range
+        assert smoke_events_low <= smoke_events <= smoke_events_high
+    
+    # set up a smoke detector and give it a high chance of
+    # having the alarm go off so we can test the functionality
+    def test_smoke_detector_smoke_battery(self):
+        # set up the test
+        cycle_len = int(20e6) # this gives us a dead battery about every 1000 cycles
+        sensor = __SmokeDetector__(cycle_len)
+        sensor.seed(123)
+        n = int(1e4)
+        battery_events_low = 5
+        battery_events_high = 15
+        battery_events = 0
+
+        # run n samples
+        for _ in range(n):
+            status = sensor.sample()
+            if status["battery_dead"]:
+                battery_events += 1
+        
+        # make sure the number of smoke events is within range
+        assert battery_events_low <= battery_events <= battery_events_high
