@@ -118,15 +118,17 @@ class HomeMonitoringDataGen():
     # chances of triggering
     def __get_sensor_kappa__(self, style: PASSIVE_SENSOR_STYLE = "motion"):
         sundown = self.current_datetime.hour > SUNSET_HOUR
+        beta = 1.0
         match (style, sundown):
             case ("motion", False): # motion sensor during the day
-                return 24.0
+                beta *= 24.0
             case ("motion", True):  # motion sensor during the night
-                return 6.0
+                beta *= 6.0
             case ("door", False):   # door sensor during the day
-                return 4.0
+                beta *= 4.0
             case ("door", True):    # door sensor during the night
-                return 1.0
+                beta *= 1.0
+        return (self.num_occupants * beta) / TICKS_PER_DAY
 
     def __process_temp_sensor__(self, sensor, sensor_name: str, ieee_encoded: bool = False):
         # sample the sensor
