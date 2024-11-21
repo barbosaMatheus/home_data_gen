@@ -130,6 +130,7 @@ class HomeMonitoringDataGen():
                 beta *= 1.0
         return (self.num_occupants * beta) / TICKS_PER_DAY
 
+    # processes one cycle for a temperature sensor
     def __process_temp_sensor__(self, sensor, sensor_name: str, ieee_encoded: bool = False):
         # sample the sensor
         temp = (__TempSensor__)(sensor).sample(self.minor_cycle_len)
@@ -137,6 +138,7 @@ class HomeMonitoringDataGen():
         # TODO: store the data
         # TODO: check for data size
 
+    # processes one cycle for a passive sensor
     def __process_passive_sensor__(self, sensor):
         # get kappa
         kappa = self.__get_sensor_kappa__((__PassiveSensor__)(sensor).style)
@@ -146,6 +148,7 @@ class HomeMonitoringDataGen():
         # TODO: store the data
         # TODO: check for data size
 
+    # process one cycle for a co2 sensor
     def __process_humidity_co2_sensor__(self, sensor, sensor_name: str, cycle: int):
         # read the value (same for both)
         sensor_reading = sensor.sample(cycle)
@@ -160,6 +163,7 @@ class HomeMonitoringDataGen():
         
         # TODO: check for data size
 
+    # process one cycle for the smoke detector
     def __process_smoke_detector_data__(self, sensor):
         status = (__SmokeDetector__)(sensor).sample()
         # alarm went off for dead battery
@@ -182,6 +186,7 @@ class HomeMonitoringDataGen():
                                                            dtype=SMOKE_ARRAY_DTYPE))
         # TODO: check for array size
 
+    # advances time by one cycle
     def __advance_time__(self):
         prev_hour = self.current_datetime.hour
         self.current_datetime += datetime.timedelta(milliseconds=self.minor_cycle_len)
