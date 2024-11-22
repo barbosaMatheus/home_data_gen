@@ -59,11 +59,24 @@ class HomeMonitoringDataGen():
         self.passive_sensor_df = pd.DataFrame(columns=["datetime", "sensor_id", "voltage"])
         self.humidity_co2_sensor_data = ""
         self.smoke_detector_data = np.array([], dtype=SMOKE_ARRAY_DTYPE)
+        self.sensors = {}
+
+    def custom_build(self):
+        """
+        Use this if components were custom built
+        so the object will set the built flag. No
+        checks are done, so make sure that that
+        build integrity is externally checked.
+        """
+        # confirm build
+        self.__is_built__ = True
 
     # build components
     def __build__(self, force=False):
-        if not self.__is_built__ and not force:
-            # sensors list
+        # we run this loop if the components were not previously built
+        # or if the inputs are forcing a build
+        if (not self.__is_built__) or force:
+            # sensors dict
             self.sensors = {}
 
             # temp sensors
@@ -200,7 +213,7 @@ class HomeMonitoringDataGen():
             for sensor_name in ("t1","t2"):
                 self.sensors[sensor_name].day_cycle()
 
-    def start(self, name: str, reset: bool = False):
+    def start(self, name: str, output_dir_base_path: str = "", reset: bool = False):
         """
         Starts the simulation process, with the option to reset,
             which forces a build, regenerating the components.
@@ -208,6 +221,8 @@ class HomeMonitoringDataGen():
         Args:
             name (str): name which will pre-append to the current simulation
                 output files.
+            output_dir_base_path (str): base path for the output directory,
+                which defaults to pwd if none given.
             reset (bool): if True, will force build the object, which
                 resets the components.
         """
@@ -216,7 +231,7 @@ class HomeMonitoringDataGen():
                 
         # create the top directory
         tag = datetime.datetime.now().replace(" ","T").replace(":","_").replace(".","_")
-        topdir = f"{name}_{tag}"
+        topdir = os.path.join(output_dir_base_path, f"{name}_{tag}")
         if not os.path.isdir(topdir):
             os.mkdir(topdir)
 
