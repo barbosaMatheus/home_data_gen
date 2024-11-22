@@ -297,6 +297,7 @@ class HomeMonitoringDataGen():
         topdir = os.path.join(output_dir_base_path, f"{name}_{tag}")
         if not os.path.isdir(topdir):
             os.mkdir(topdir)
+        self.topdir_path = topdir
 
         # create data file names
         door_motion_filepath = os.path.join(topdir, f"{name}_door_motion(1).parquet")

@@ -1,3 +1,5 @@
+import os
+import pandas as pd
 import home_monitoring_data_gen as dg
 from components import __TempSensor__
 
@@ -20,9 +22,26 @@ def one_sensor_full_test():
     home.custom_build()
     
     # run test
-    home.start(name="integration_t1", output_dir_base_path=OUTPUT_BASE_PATH)
+    output_path = home.start(name="integration_t1", output_dir_base_path=OUTPUT_BASE_PATH)
 
+    # diffs in expected vs actual output, if any
+    diffs = []
     # check for the folder/file structure
+    dir_created = os.path.isdir(output_path)
+    if not dir_created:
+        diffs.append(f"Expected creation of directory {output_path}, but failed.")
+        return False, diffs
+    file_created = False
+    df = None
+    for name in os.listdir(output_path):
+        if (("temperature_data" in name) and name.endswith(".parquet") and 
+            os.path.isfile(os.path.join(output_path,name))): 
+            df = pd.DataFrame(os.path.isfile(os.path.join(output_path,name)))
+            file_created = True
+            break
+    if not file_created:
+        diffs.append(f"Expected creation of temperature data parquet file, but failed.")
+        return False, diffs
     # check for dataframe format
     # check for correct number of cycles
     # check for correct ending datetime
@@ -36,6 +55,7 @@ if __name__ == "__main__":
         print(f"Running: {test.__name__}")
         passed, diff = test()
         passes += int(passed)
-        print(f"Test {"PASSED" if passed else "FAILED"}")
+        print(f"Test {"PASSED" if passed else "FAILED"} for reasons:")
         if not passed:
-            print(diff)
+            for i, msg in enumerate(diff):
+                print(f"{i+1}. {msg}")
