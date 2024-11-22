@@ -42,23 +42,23 @@ Data Output
 1. Temperature Sensors
     - Will update at each minor cycle
     - Date in yyyy-mm-dd format (i.e.: "1995-02-01" for February 2, 1995)
-    - Time in hh\:mm\:ss.SSS format (.i.e.: 17\:05:\15.500)
+    - Time in hh\:mm\:ss.SSSSSS format (.i.e.: 17\:05:\15.500000)
     - T1 outputs temperature value in units of Fahrenheit as a signed floating point value ranging from -100.0 to +250.0
     - T2 outputs its value in four different packets in least significant word first (LSW-First) order. When put together they form a [single-precision floating-point number](https://en.wikipedia.org/wiki/Single-precision_floating-point_format) These values will be stored as integers, but when correctly converted to single-precision they will represent Fahrenheit.
     - These will be stored in a joint file named temperature_data.parquet that will contain a dataframe similar to:
 
-    | date       | time           | sensor | packet_id | payload |
-    |------------|----------------|--------|-----------|---------|
-    | 1995-02-01 | 13\:46\:08.347 | T1     | T1P00     | 72.054  |
-    | 1995-02-01 | 13\:46\:08.347 | T2     | T2P00     | 0x83    |
-    | 1995-02-01 | 13\:46\:08.347 | T2     | T2P01     | 0x00    |
-    | 1995-02-01 | 13\:46\:08.347 | T2     | T2P10     | 0x90    |
-    | 1995-02-01 | 13\:46\:08.347 | T2     | T2P11     | 0x42    |
-    | 1995-02-01 | 13\:46\:08.847 | T1     | T1P00     | 72.061  |
-    | 1995-02-01 | 13\:46\:08.847 | T2     | T2P00     | 0x06    |
-    | 1995-02-01 | 13\:46\:08.847 | T2     | T2P01     | 0x01    |
-    | 1995-02-01 | 13\:46\:08.847 | T2     | T2P10     | 0x90    |
-    | 1995-02-01 | 13\:46\:08.847 | T2     | T2P11     | 0x42    |
+    | date       | time              | sensor | packet_id | payload |
+    |------------|-------------------|--------|-----------|---------|
+    | 1995-02-01 | 13\:46\:08.347000 | T1     | T1P00     | 72.054  |
+    | 1995-02-01 | 13\:46\:08.347000 | T2     | T2P00     | 0x83    |
+    | 1995-02-01 | 13\:46\:08.347000 | T2     | T2P01     | 0x00    |
+    | 1995-02-01 | 13\:46\:08.347000 | T2     | T2P10     | 0x90    |
+    | 1995-02-01 | 13\:46\:08.347000 | T2     | T2P11     | 0x42    |
+    | 1995-02-01 | 13\:46\:08.847000 | T1     | T1P00     | 72.061  |
+    | 1995-02-01 | 13\:46\:08.847000 | T2     | T2P00     | 0x06    |
+    | 1995-02-01 | 13\:46\:08.847000 | T2     | T2P01     | 0x01    |
+    | 1995-02-01 | 13\:46\:08.847000 | T2     | T2P10     | 0x90    |
+    | 1995-02-01 | 13\:46\:08.847000 | T2     | T2P11     | 0x42    |
 
 2. Door/Motion Sensors
     - Updates every 30 seconds, or when there is a door opening or motion detected by one of the sensors

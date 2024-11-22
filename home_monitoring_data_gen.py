@@ -28,6 +28,48 @@ MAX_STRING_SIZE = 10_000_000
 MAX_ARRAY_SIZE = 10_000_000
 SMOKE_ARRAY_DTYPE = np.dtype("u8, u1, u1, u1, u1, U1")
 
+class DataLimits():
+    """
+    Contains data size limits for different data types
+
+    Attributes:
+        max_dataframe_size (int): max size in bytes, a dataframe
+            can be in memory before it gets written out to file.
+        max_string_size (int): max size in bytes, a string object
+            can be in memory before it gets written out to file.
+        max_array_size (int): max size in bytes, a numpy array
+            can be in memory before it gets written out to file.
+    """
+    def __init__(self, max_dataframe_size: int = MAX_DATAFRAME_SIZE, 
+                 max_string_size: int = MAX_STRING_SIZE,
+                 max_array_size: int = MAX_ARRAY_SIZE):
+        self.max_dataframe_size = max_dataframe_size
+        self.max_string_size = max_string_size
+        self.max_array_size = max_array_size
+
+    def get_all(self):
+        """
+        Returns all max sizes as a tuple in the order: dataframe, 
+        string, array.
+        """
+        return self.max_dataframe_size, self.max_string_size, self.max_array_size
+    
+    def set_all(self, df_size: int, str_size: int, arr_size: int):
+        """
+        Sets the max sizes, if possible. Any that fail will remain the same.
+
+        Arguments:
+            df_size (int): max size in bytes, a dataframe
+                can be in memory before it gets written out to file.
+            str_size (int): max size in bytes, a string object
+                can be in memory before it gets written out to file.
+            arr_size (int): max size in bytes, a numpy array
+                can be in memory before it gets written out to file.
+        """
+        self.max_dataframe_size = scrub_pos_int(df_size, self.max_dataframe_size)
+        self.max_string_size = scrub_pos_int(str_size, self.max_string_size)
+        self.max_array_size = scrub_pos_int(arr_size, self.max_array_size)
+
 class HomeMonitoringDataGen():
     """
     Generates simulated data for a home monitorting system. Given a
@@ -44,9 +86,13 @@ class HomeMonitoringDataGen():
             Sun during the day, as well as the temperature drop at sunset.
         sensor_fail_rate (float): rate at which the temperature, humidity and CO2
             sensors fail, giving missing or incorrect data.
+        data_limits (DataLimits): object that stores in-memory size limits for different
+            data types. When the accumulated data (approximately) exceeds the limit, it
+            will be written out to a file and cleared to start a new set of data.
     """
     def __init__(self, start_date_str: str, num_days: int, num_occupants: int, 
-                 minor_cycle_len: int, temp_bias: float, sensor_fail_rate: float):
+                 minor_cycle_len: int, temp_bias: float, sensor_fail_rate: float,
+                 data_limits: DataLimits = None):
         self.start_date = scrub_date_str(start_date_str, default_x="2024-06-15")
         self.num_days = scrub_pos_int(num_days, default_x=1000)
         self.num_occupants = scrub_pos_int(num_occupants, default_x=1)
@@ -60,6 +106,7 @@ class HomeMonitoringDataGen():
         self.humidity_co2_sensor_data = ""
         self.smoke_detector_data = np.array([], dtype=SMOKE_ARRAY_DTYPE)
         self.sensors = {}
+        self.data_limits = data_limits or DataLimits() # if no passed in limits we use the defaults
 
     def custom_build(self):
         """
@@ -147,8 +194,24 @@ class HomeMonitoringDataGen():
     def __process_temp_sensor__(self, sensor, sensor_name: str, ieee_encoded: bool = False):
         # sample the sensor
         temp = (__TempSensor__)(sensor).sample(self.minor_cycle_len)
-        # TODO: encode data
-        # TODO: store the data
+        
+        # encode data
+        # date (Y-M-D), time (H:M:S.sss),
+        # sensor (Tx), packet_id (TxPyy), payload
+        num_packets = 4 if ieee_encoded else 1
+        row = [self.current_datetime.strftime("%Y-%M-%D"), self.current_datetime.strftime(f"%H:%M:%S.%f"),
+               sensor_name.upper(),"",0]
+        if num_packets > 1:
+            temp_str = np.float32(temp).tobytes().hex()
+            for i, word in enumerate([temp_str[i:i+2] for i in range(0,len(temp_str),2)]):
+                packet_id = f"{sensor_name.upper()}P{i:02b}"
+                payload = f"0x{word}"
+                row[3:5] = [packet_id, payload]
+                self.temp_sensor_df.loc[self.temp_sensor_df.shape[0]] = row
+        else:
+            packet_id = f"{sensor_name.upper()}P00"
+            payload = str(temp)
+            row[3:5] = [packet_id, payload]
         # TODO: check for data size
 
     # processes one cycle for a passive sensor
