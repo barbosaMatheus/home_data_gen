@@ -1,10 +1,13 @@
 import os
+from datetime import datetime, timedelta
 import pandas as pd
 import home_monitoring_data_gen as dg
 from components import __TempSensor__
 
 OUTPUT_BASE_PATH = "../output"
 
+# builds a setup with one senso and runs the
+# entire process throug to file output
 def one_sensor_full_test():
     # parameters and setup
     num_days = 7
@@ -12,10 +15,13 @@ def one_sensor_full_test():
     failrate = 0.001
     temp_bias = 2.0
     total_cycles = int(num_days * (86400000 / cycle_len))
+    start_date_str = "2023-04-11T09:00:00"
+
     # build the object to simulate a week
-    home = dg.HomeMonitoringDataGen(start_date_str="2023-04-11T09:00:00", num_days=num_days,
+    home = dg.HomeMonitoringDataGen(start_date_str=start_date_str, num_days=num_days,
                                     num_occupants=1, temp_bias=temp_bias, 
                                     minor_cycle_len=cycle_len, sensor_fail_rate=failrate)
+    
     # using t2 we can test the ieee encoding
     home.sensors["t2"] = __TempSensor__(fail_rate=failrate, start_temp=72.0, 
                                         sunlight="direct", bias=temp_bias)
@@ -26,6 +32,7 @@ def one_sensor_full_test():
 
     # diffs in expected vs actual output, if any
     diffs = []
+    
     # check for the folder/file structure
     dir_created = os.path.isdir(output_path)
     if not dir_created:
@@ -40,14 +47,35 @@ def one_sensor_full_test():
             file_created = True
             break
     if not file_created:
-        diffs.append(f"Expected creation of temperature data parquet file, but failed.")
+        diffs.append("Expected creation of temperature data parquet file, but failed.")
         return False, diffs
+    
     # check for dataframe format
-    # check for correct number of cycles
+    if df is None: # df is valid
+        diffs.append("Expected temperature parquet to contain dataframe, but failed.")
+        return False, diffs
+    expected_df_cols = ["date", "time", "sensor", "packet_id", "payload"]
+    if df.columns.tolist() != expected_df_cols: # correct columns
+        diffs.append(f"Expected dataframe to have columns {expected_df_cols}, but got {df.columns.tolist()}")
+        return False, diffs
+    expected_rows = total_cycles * 4 # 4 packets per cycle
+    if df.shape[0] != expected_rows:
+        diffs.append(f"Expected dataframe to have {expected_rows} rows, but got {df.shape[0]}")
+        return False, diffs
+
     # check for correct ending datetime
-
-
-# build and run integration tests
+    end_date = datetime.fromisoformat(start_date_str) + timedelta(milliseconds=int(total_cycles*cycle_len))
+    expected_end_date_str = end_date.strftime("%Y-%M-%D") 
+    if df.iloc[-1,0] != expected_end_date_str:
+        diffs.append(f"Expected final date stamp to be {expected_end_date_str}, but got {df.iloc[-1,0]}")
+        return False, diffs
+    expected_end_time_str = end_date.strftime("%H:%M:%S.%f")
+    if df.iloc[-1,1] != expected_end_time_str:
+        diffs.append(f"Expected final time stamp to be {expected_end_time_str}, but got {df.iloc[-1,1]}")
+        return False, diffs
+    return True, diffs
+    
+# run integration tests
 if __name__ == "__main__":
     tests = [one_sensor_full_test]
     passes = 0
