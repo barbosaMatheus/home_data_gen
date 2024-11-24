@@ -1,17 +1,20 @@
 import os
-from datetime import datetime, timedelta
+import sys
+import datetime
 import pandas as pd
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../"))
 import home_monitoring_data_gen as dg
 from components import __TempSensor__
 
-OUTPUT_BASE_PATH = "../output"
+OUTPUT_BASE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 
+                                                "../../output")
 
 # builds a setup with one senso and runs the
 # entire process throug to file output
 def one_sensor_full_test():
     # parameters and setup
     num_days = 7
-    cycle_len = 1000    # 1000 ms
+    cycle_len = 3600000 # 1 hour
     failrate = 0.001
     temp_bias = 2.0
     total_cycles = int(num_days * (86400000 / cycle_len))
@@ -64,7 +67,7 @@ def one_sensor_full_test():
         return False, diffs
 
     # check for correct ending datetime
-    end_date = datetime.fromisoformat(start_date_str) + timedelta(milliseconds=int(total_cycles*cycle_len))
+    end_date = datetime.datetime.fromisoformat(start_date_str) + datetime.timedelta(milliseconds=int(total_cycles*cycle_len))
     expected_end_date_str = end_date.strftime("%Y-%M-%D") 
     if df.iloc[-1,0] != expected_end_date_str:
         diffs.append(f"Expected final date stamp to be {expected_end_date_str}, but got {df.iloc[-1,0]}")
@@ -83,7 +86,7 @@ if __name__ == "__main__":
         print(f"Running: {test.__name__}")
         passed, diff = test()
         passes += int(passed)
-        print(f"Test {"PASSED" if passed else "FAILED"} for reasons:")
+        print(f"Test {'PASSED' if passed else 'FAILED'} for reasons:")
         if not passed:
             for i, msg in enumerate(diff):
                 print(f"{i+1}. {msg}")

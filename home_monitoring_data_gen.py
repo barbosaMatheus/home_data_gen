@@ -97,9 +97,9 @@ class HomeMonitoringDataGen():
         self.num_days = scrub_pos_int(num_days, default_x=1000)
         self.num_occupants = scrub_pos_int(num_occupants, default_x=1)
         self.minor_cycle_len = scrub_pos_int(minor_cycle_len, default_x=500)
-        self.temp_bias = scrub_temp_f(temp_bias)
+        self.temp_bias = scrub_temp_f(temp_bias, default_x=2.0)
         self.sensor_fail_rate = scrub_proportion(x=sensor_fail_rate, default_x=0.0)
-        self.total_cycles = (TICKS_PER_DAY/self.minor_cycle_len)*self.num_days
+        self.total_cycles = int((TICKS_PER_DAY/self.minor_cycle_len)*self.num_days)
         self.__is_built__ = False
         self.temp_sensor_df = pd.DataFrame(columns=["date", "time", "sensor", "packet_id", "payload"])
         self.passive_sensor_df = pd.DataFrame(columns=["datetime", "sensor_id", "voltage"])
@@ -193,7 +193,7 @@ class HomeMonitoringDataGen():
     # processes one cycle for a temperature sensor
     def __process_temp_sensor__(self, sensor, sensor_name: str, ieee_encoded: bool = False):
         # sample the sensor
-        temp = (__TempSensor__)(sensor).sample(self.minor_cycle_len)
+        temp = sensor.sample(self.minor_cycle_len)
         
         # encode data
         # date (Y-M-D), time (H:M:S.sss),
@@ -219,7 +219,7 @@ class HomeMonitoringDataGen():
         # get kappa
         kappa = self.__get_sensor_kappa__((__PassiveSensor__)(sensor).style)
         # sample the sensor
-        voltage = (__PassiveSensor__)(sensor).sample(kappa)
+        voltage = sensor.sample(kappa)
         # TODO: encode data
         # TODO: store the data
         # TODO: check for data size
@@ -241,7 +241,7 @@ class HomeMonitoringDataGen():
 
     # process one cycle for the smoke detector
     def __process_smoke_detector_data__(self, sensor):
-        status = (__SmokeDetector__)(sensor).sample()
+        status = sensor.sample()
         # alarm went off for dead battery
         if status["battery_dead"]:
             self.smoke_detector_data = np.append(self.smoke_detector_data, 
@@ -265,17 +265,19 @@ class HomeMonitoringDataGen():
     # advances time by one cycle
     def __advance_time__(self):
         prev_hour = self.current_datetime.hour
-        self.current_datetime += datetime.timedelta(milliseconds=self.minor_cycle_len)
+        self.current_datetime += (datetime.timedelta(milliseconds=self.minor_cycle_len))
         next_hour = self.current_datetime.hour
         # if going from day to night
         if (prev_hour > SUNRISE_HOUR) and (prev_hour < SUNSET_HOUR) and (next_hour >= SUNSET_HOUR):
-            for sensor_name in ("t1","t2"):
-                self.sensors[sensor_name].night_cycle()
+            for sensor_name in self.sensors.keys():
+                if sensor_name.startswith("t"):
+                    self.sensors[sensor_name].night_cycle()
         # if going from night to day
         elif ((prev_hour > SUNSET_HOUR) or (prev_hour < SUNRISE_HOUR)) and (next_hour >= SUNRISE_HOUR):
-            for sensor_name in ("t1","t2"):
-                self.sensors[sensor_name].day_cycle()
-
+            for sensor_name in self.sensors.keys():
+                if sensor_name.startswith("t"):
+                    self.sensors[sensor_name].day_cycle()
+    
     def start(self, name: str, output_dir_base_path: str = "", reset: bool = False):
         """
         Starts the simulation process, with the option to reset,
@@ -293,7 +295,7 @@ class HomeMonitoringDataGen():
         self.__build__(reset)
                 
         # create the top directory
-        tag = datetime.datetime.now().replace(" ","T").replace(":","_").replace(".","_")
+        tag = str(datetime.datetime.now()).replace(" ","T").replace(":","_").replace(".","_")
         topdir = os.path.join(output_dir_base_path, f"{name}_{tag}")
         if not os.path.isdir(topdir):
             os.mkdir(topdir)
@@ -316,8 +318,8 @@ class HomeMonitoringDataGen():
             for sensor_name, sensor in self.sensors.items():
                 # process temperature sensors
                 if sensor_name.startswith("t"):
-                    self.__process_temp_sensor__(sensor, 
-                                                ieee_encoded=(sensor_name.isin(("t2",))))
+                    self.__process_temp_sensor__(sensor, sensor_name,
+                                                ieee_encoded=(sensor_name in ("t2",)))
                 # process motion and door sensors
                 elif sensor_name.startswith("m") or sensor_name.startswith("d"):
                     self.__process_passive_sensor__(sensor)
@@ -329,3 +331,4 @@ class HomeMonitoringDataGen():
                 # process smoke detector
                 elif sensor_name.startswith("s"):
                     self.__process_smoke_detector_data__(sensor)
+        return topdir
