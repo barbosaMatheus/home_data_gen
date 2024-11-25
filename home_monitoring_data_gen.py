@@ -4,6 +4,7 @@ Contains object that generates simulated home monitoring data
 # native imports
 import datetime
 import os
+import re
 
 # third party imports
 import numpy as np
@@ -26,6 +27,7 @@ TICK_SCALE = 1_000
 MAX_DATAFRAME_SIZE = 100_000_000
 MAX_STRING_SIZE = 10_000_000
 MAX_ARRAY_SIZE = 10_000_000
+MAX_BYTE_RATE = 840                     # estimated peak bytes written per cycle to largest dataframe
 SMOKE_ARRAY_DTYPE = np.dtype("u8, u1, u1, u1, u1, U1")
 
 class DataLimits():
@@ -106,7 +108,10 @@ class HomeMonitoringDataGen():
         self.humidity_co2_sensor_data = ""
         self.smoke_detector_data = np.array([], dtype=SMOKE_ARRAY_DTYPE)
         self.sensors = {}
-        self.data_limits = data_limits or DataLimits() # if no passed in limits we use the defaults
+        # if no passed in limits we use the defaults
+        self.data_limits = data_limits or DataLimits()
+        # how often (in cycles) to check/flush the RAM, with some wiggle room
+        self.flush_rate = self.data_limits.max_dataframe_size // MAX_BYTE_RATE // 2
 
     def custom_build(self):
         """
@@ -199,7 +204,7 @@ class HomeMonitoringDataGen():
         # date (Y-M-D), time (H:M:S.sss),
         # sensor (Tx), packet_id (TxPyy), payload
         num_packets = 4 if ieee_encoded else 1
-        row = [self.current_datetime.strftime("%Y-%M-%D"), self.current_datetime.strftime(f"%H:%M:%S.%f"),
+        row = [self.current_datetime.strftime("%Y-%m-%d"), self.current_datetime.strftime("%H:%M:%S.%f"),
                sensor_name.upper(),"",0]
         if num_packets > 1:
             temp_str = np.float32(temp).tobytes().hex()
@@ -212,7 +217,7 @@ class HomeMonitoringDataGen():
             packet_id = f"{sensor_name.upper()}P00"
             payload = str(temp)
             row[3:5] = [packet_id, payload]
-        # TODO: check for data size
+            self.temp_sensor_df.loc[self.temp_sensor_df.shape[0]] = row
 
     # processes one cycle for a passive sensor
     def __process_passive_sensor__(self, sensor):
@@ -222,7 +227,6 @@ class HomeMonitoringDataGen():
         voltage = sensor.sample(kappa)
         # TODO: encode data
         # TODO: store the data
-        # TODO: check for data size
 
     # process one cycle for a co2 sensor
     def __process_humidity_co2_sensor__(self, sensor, sensor_name: str, cycle: int):
@@ -236,8 +240,6 @@ class HomeMonitoringDataGen():
         # co2 sensor we onlt record the value
         elif sensor_name.startswith("c"):
             self.humidity_co2_sensor_data += f"{sensor_reading:03}ppm"
-        
-        # TODO: check for data size
 
     # process one cycle for the smoke detector
     def __process_smoke_detector_data__(self, sensor):
@@ -260,7 +262,6 @@ class HomeMonitoringDataGen():
                                                            self.current_datetime.hour,
                                                            self.current_datetime.minute,'S'), 
                                                            dtype=SMOKE_ARRAY_DTYPE))
-        # TODO: check for array size
 
     # advances time by one cycle
     def __advance_time__(self):
@@ -278,7 +279,29 @@ class HomeMonitoringDataGen():
                 if sensor_name.startswith("t"):
                     self.sensors[sensor_name].day_cycle()
     
-    def start(self, name: str, output_dir_base_path: str = "", reset: bool = False):
+    # generates non-clashing file name for the next
+    # sequence of data from the same source
+    def __gen_next_filename__(self, old_name: str):
+        # find the tag using regex
+        tag = re.findall(r"\([0-9]+\)", old_name)[-1]
+        # increment index to create new tag
+        new_tag = f"({int(tag[1:-1])+1})"
+        return old_name.replace(tag, new_tag)
+
+    # writes data if it is too large to hold in memory or if
+    # the simulation has finished
+    def __flush__(self, sim_over=False):
+        # temperature data
+        if sim_over or (self.temp_sensor_df.memory_usage().sum() >= self.data_limits.max_dataframe_size):
+            self.temp_sensor_df.to_parquet(self.temp_data_latest_filepath)
+            self.temp_sensor_df = self.temp_sensor_df[0:0]
+            self.temp_data_latest_filepath = self.__gen_next_filename__(self.temp_data_latest_filepath)
+        # passive sensors data
+        # humidity and co2 sensors data
+        # smoke detector datas
+
+    def start(self, name: str, output_dir_base_path: str = "", 
+              reset: bool = False,  quiet: bool = False):
         """
         Starts the simulation process, with the option to reset,
             which forces a build, regenerating the components.
@@ -290,6 +313,8 @@ class HomeMonitoringDataGen():
                 which defaults to pwd if none given.
             reset (bool): if True, will force build the object, which
                 resets the components.
+            quiet (bool): if False, will print out some information
+                during sim.
         """
         # build and reset if needed
         self.__build__(reset)
@@ -302,18 +327,22 @@ class HomeMonitoringDataGen():
         self.topdir_path = topdir
 
         # create data file names
-        door_motion_filepath = os.path.join(topdir, f"{name}_door_motion(1).parquet")
-        temp_data_filepath = os.path.join(topdir, f"{name}_temp_data(1).parquet")
-        co2_humidity_filepath = os.path.join(topdir, f"{name}_co2_humidity_data(1).pkl")
-        smoke_detector_filepath = os.path.join(topdir, f"{name}_smoke_detector_data(1).byte")
+        self.door_motion_latest_filepath = os.path.join(topdir, f"{name}_door_motion(1).parquet")
+        self.temp_data_latest_filepath = os.path.join(topdir, f"{name}_temp_data(1).parquet")
+        self.co2_humidity_latest_filepath = os.path.join(topdir, f"{name}_co2_humidity_data(1).pkl")
+        self.smoke_detector_latest_filepath = os.path.join(topdir, f"{name}_smoke_detector_data(1).byte")
         
         # set start time
         self.current_datetime = self.start_date
         # loop through all time steps
         for i in range(self.total_cycles):
-            print(f"Cycle {i}: {str(self.current_datetime)}")
+            if not quiet:
+                print(f"Cycle {i}: {str(self.current_datetime)}")
             # advance the datetime stamp
             self.__advance_time__()
+            # check/flush RAM if needed
+            if (i % self.flush_rate) == 0:
+                self.__flush__()
             # loop through each sensor
             for sensor_name, sensor in self.sensors.items():
                 # process temperature sensors
@@ -331,4 +360,7 @@ class HomeMonitoringDataGen():
                 # process smoke detector
                 elif sensor_name.startswith("s"):
                     self.__process_smoke_detector_data__(sensor)
+        
+        # final flush with sim_over flag on to write out all data
+        self.__flush__(sim_over=True)
         return topdir
