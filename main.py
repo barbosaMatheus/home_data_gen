@@ -14,7 +14,7 @@ parser.add_argument("-s", "--start", dest="start_date", type=str,
 parser.add_argument("-d", "--days", dest="num_days", type=int,
                     help="Number of days to simulate",
                     required=False, default=365)
-parser.add_argument("-o", "--occup", dest="num_occupants", type=int,
+parser.add_argument("-p", "--occup", dest="num_occupants", type=int,
                     help="Number of occupants in the home",
                     required=False, default=365)
 parser.add_argument("-c", "--cycle", dest="minor_cycle_len", type=int,
@@ -27,6 +27,9 @@ parser.add_argument("-b", "--bias", dest="temp_bias", type=float,
 parser.add_argument("-f", "--fail", dest="fail_rate", type=float,
                     help="temp/humidity/CO2 sensors failure rate [0.0-1.0)",
                     required=False, default=0.001)
+parser.add_argument("-o", "--outdir", dest="output_dir", type=str,
+                    help="output directory path, defaults to pwd",
+                    required=False, default="./")
 args = parser.parse_args()
 
 if __name__ == "__main__":
@@ -35,3 +38,5 @@ if __name__ == "__main__":
                                 minor_cycle_len=args.minor_cycle_len, 
                                 temp_bias=args.temp_bias,
                                 sensor_fail_rate=args.fail_rate)
+    output_dir = gen.start(args.base_name, args.output_dir)
+    print(f"Files written to {output_dir}")
