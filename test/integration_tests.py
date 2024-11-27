@@ -10,13 +10,13 @@ OUTPUT_BASE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                                 "../../output")
 
 # builds a setup with one sensor and runs the
-# entire process throug to file output
+# entire process through to file output
 def one_sensor_full_test():
     # parameters and setup
     num_days = 7
     cycle_len = 3600000 # 1 hour
     failrate = 0.001
-    temp_bias = 2.0
+    temp_bias = 0.001
     total_cycles = int(num_days * (86400000 / cycle_len))
     start_date_str = "2023-04-11T09:00:00"
     proj_name = "integration_t1"
@@ -98,7 +98,7 @@ def data_limit_test():
     max_df_size = 20000
     expected_files = (expected_total_bytes // max_df_size) + 1
 
-    # build the object to simulate a week
+    # build the object to simulate a day
     limits = dg.DataLimits(max_dataframe_size=max_df_size)
     home = dg.HomeMonitoringDataGen(start_date_str=start_date_str, num_days=num_days,
                                     num_occupants=1, temp_bias=temp_bias, 
@@ -133,9 +133,58 @@ def data_limit_test():
         return False, diffs
     return True, diffs
 
+# builds a setup with all sensor types and 
+# runs the entire process through to file 
+# output
+def all_sensor_types_test():
+    # parameters and setup
+    num_days = 400
+    cycle_len = 36000000 # 10 hours
+    failrate = 0.001
+    temp_bias = 0.0001
+    start_date_str = "2023-04-11T09:00:00"
+    proj_name = "integration_t3"
+
+    # build the object to simulate 400 days
+    home = dg.HomeMonitoringDataGen(start_date_str=start_date_str, num_days=num_days,
+                                    num_occupants=1, temp_bias=temp_bias, 
+                                    minor_cycle_len=cycle_len, sensor_fail_rate=failrate)
+    
+    # run test with the default build
+    output_path = home.start(name=proj_name, output_dir_base_path=OUTPUT_BASE_PATH,
+                             quiet=True)
+
+    # diffs in expected vs actual output, if any
+    diffs = []
+    
+    # check for the folder structure
+    dir_created = os.path.isdir(output_path)
+    if not dir_created:
+        diffs.append(f"Expected creation of directory {output_path}, but failed.")
+        return False, diffs
+    
+    # check for all the files
+    conditions = {"Temperature Sensor": ["temp_data",".parquet",False],
+                  "Door/Motion Sensors": ["door_motion_data",".parquet",False],
+                  "CO2/Humidity Sensors": ["co2_humidity_data",".pkl",False],
+                  "Smoke Detector": ["smoke_detector_data",".bin",False]}
+    passed = True
+    for descr, conds in conditions.items():
+        pattern = conds[0]
+        ext = conds[1]
+        for name in os.listdir(output_path):
+            if ((pattern in name) and name.endswith(ext) and 
+                os.path.isfile(os.path.join(output_path,name))): 
+                conditions[descr][2] = True # file found
+                break
+        if conditions[descr][2] is False: # file not found
+            diffs.append(f"Expected creation of {descr} {ext} file(s) at {output_path}, but failed.")
+            passed = False
+    return passed, diffs
+
 # run integration tests
 if __name__ == "__main__":
-    tests = [one_sensor_full_test, data_limit_test]
+    tests = [one_sensor_full_test, data_limit_test, all_sensor_types_test]
     passes = 0
     for test in tests:
         print("=============================================")

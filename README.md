@@ -64,7 +64,7 @@ Data Output
     - Updates every 30 seconds, or when there is a door opening or motion detected by one of the sensors
     - Datetime stamp is in YYYYJJJ-SSSSS where YYYYJJJ is the Julian date and SSSSS is a zero-padded, 5-digit value representing the number of seconds since midnight
     - The sensors report a voltage in units of milliVolts as an integer. Any value at or above 3100mV (3.1V) is considered a logic "1" or a detection by the sensor. Values at or below 1800mV (1.8V) are considered logic "0" or no detection. In between values are undefined, these will be the values transmitted in between triggers and snapshots.
-    - Data will be grouped and output to a file called temp_data.parquet
+    - Data will be grouped and output to a file called door_motion_data.parquet
     - Data is grouped in a dataframe like so:
     
     | datetime      | sensor_id | voltage |
@@ -92,7 +92,7 @@ Data Output
     - Data is output to binary file called smoke_detector.bin
     - Collection of datetime stamps of when the smoke detector alarm went off and the reason
     - Reason is a 1-character field where "S" means smoke detected and "B" means dead battery
-    - Will be stored in memory as an array but will be written out to a byte file name "smoke_detector_data.byte"
+    - Will be stored in memory as an array but will be written out to a byte file name "smoke_detector_data.bin"
     - The array, once decoded from bytes, may look like this:
 
     [[<year_as_int64>,<month_as_int8>,<day_as_int8>,<hours_as_int8>,<minutes_as_int8>,<reason_as_char(1)>],

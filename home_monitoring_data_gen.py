@@ -9,6 +9,7 @@ import re
 # third party imports
 import numpy as np
 import pandas as pd
+import pickle
 
 # local imports
 from input_scrubbing import *
@@ -196,7 +197,7 @@ class HomeMonitoringDataGen():
         return (self.num_occupants * beta) / TICKS_PER_DAY
 
     # processes one cycle for a temperature sensor
-    def __process_temp_sensor__(self, sensor, sensor_name: str, ieee_encoded: bool = False):
+    def __process_temp_sensor__(self, sensor: __TempSensor__, sensor_name: str, ieee_encoded: bool = False):
         # sample the sensor
         temp = sensor.sample(self.minor_cycle_len)
         
@@ -220,13 +221,21 @@ class HomeMonitoringDataGen():
             self.temp_sensor_df.loc[self.temp_sensor_df.shape[0]] = row
 
     # processes one cycle for a passive sensor
-    def __process_passive_sensor__(self, sensor):
+    def __process_passive_sensor__(self, sensor: __PassiveSensor__, sensor_name: str):
         # get kappa
-        kappa = self.__get_sensor_kappa__((__PassiveSensor__)(sensor).style)
+        kappa = self.__get_sensor_kappa__(sensor.style)
         # sample the sensor
         voltage = sensor.sample(kappa)
-        # TODO: encode data
-        # TODO: store the data
+        # encode and store data in the format
+        # <yr><day_of_yr>-<secs_since_mnight> | <sensor> | <mV> |
+        year = self.current_datetime.year
+        yday = self.current_datetime.timetuple().tm_yday
+        secs_since_mnight = int((self.current_datetime.hour * 3600) + 
+                             (self.current_datetime.minute * 60) + 
+                             self.current_datetime.second)
+        datetime_stamp = f"{year:04}{yday:03}-{secs_since_mnight:05}"
+        row = [datetime_stamp, sensor_name.upper(), voltage]
+        self.passive_sensor_df.loc[self.passive_sensor_df.shape[0]] = row
 
     # process one cycle for a co2 sensor
     def __process_humidity_co2_sensor__(self, sensor, sensor_name: str, cycle: int):
@@ -242,7 +251,7 @@ class HomeMonitoringDataGen():
             self.humidity_co2_sensor_data += f"{sensor_reading:03}ppm"
 
     # process one cycle for the smoke detector
-    def __process_smoke_detector_data__(self, sensor):
+    def __process_smoke_detector_data__(self, sensor: __SmokeDetector__):
         status = sensor.sample()
         # alarm went off for dead battery
         if status["battery_dead"]:
@@ -297,8 +306,20 @@ class HomeMonitoringDataGen():
             self.temp_sensor_df = self.temp_sensor_df[0:0]
             self.temp_data_latest_filepath = self.__gen_next_filename__(self.temp_data_latest_filepath)
         # passive sensors data
+        if sim_over or (self.passive_sensor_df.memory_usage().sum() >= self.data_limits.max_dataframe_size):
+            self.passive_sensor_df.to_parquet(self.door_motion_latest_filepath)
+            self.passive_sensor_df = self.passive_sensor_df[0:0]
+            self.door_motion_latest_filepath = self.__gen_next_filename__(self.door_motion_latest_filepath)
         # humidity and co2 sensors data
-        # smoke detector datas
+        if sim_over or (len(self.humidity_co2_sensor_data) >= self.data_limits.max_string_size):
+            pickle.dump(self.humidity_co2_sensor_data, open(self.co2_humidity_latest_filepath, "wb"))
+            self.humidity_co2_sensor_data = ""
+            self.co2_humidity_latest_filepat = self.__gen_next_filename__(self.co2_humidity_latest_filepath)
+        # smoke detector data
+        if sim_over or (self.smoke_detector_data.nbytes >= self.data_limits.max_array_size):
+            self.smoke_detector_data.tofile(self.smoke_detector_latest_filepath, sep="") # to binary file
+            self.smoke_detector_data = np.array([], dtype=SMOKE_ARRAY_DTYPE)
+            self.smoke_detector_latest_filepath = self.__gen_next_filename__(self.smoke_detector_latest_filepath)
 
     def start(self, name: str, output_dir_base_path: str = "", 
               reset: bool = False,  quiet: bool = False):
@@ -316,6 +337,9 @@ class HomeMonitoringDataGen():
             quiet (bool): if False, will print out some information
                 during sim.
         """
+        # set start time
+        self.current_datetime = self.start_date
+
         # build and reset if needed
         self.__build__(reset)
                 
@@ -327,13 +351,11 @@ class HomeMonitoringDataGen():
         self.topdir_path = topdir
 
         # create data file names
-        self.door_motion_latest_filepath = os.path.join(topdir, f"{name}_door_motion(1).parquet")
+        self.door_motion_latest_filepath = os.path.join(topdir, f"{name}_door_motion_data(1).parquet")
         self.temp_data_latest_filepath = os.path.join(topdir, f"{name}_temp_data(1).parquet")
         self.co2_humidity_latest_filepath = os.path.join(topdir, f"{name}_co2_humidity_data(1).pkl")
-        self.smoke_detector_latest_filepath = os.path.join(topdir, f"{name}_smoke_detector_data(1).byte")
+        self.smoke_detector_latest_filepath = os.path.join(topdir, f"{name}_smoke_detector_data(1).bin")
         
-        # set start time
-        self.current_datetime = self.start_date
         # loop through all time steps
         for i in range(self.total_cycles):
             if not quiet:
@@ -351,7 +373,7 @@ class HomeMonitoringDataGen():
                                                 ieee_encoded=(sensor_name in ("t2",)))
                 # process motion and door sensors
                 elif sensor_name.startswith("m") or sensor_name.startswith("d"):
-                    self.__process_passive_sensor__(sensor)
+                    self.__process_passive_sensor__(sensor, sensor_name)
 
                 # process humidity and CO2 sensors
                 elif sensor_name.startswith("h") or sensor_name.startswith("c"):
