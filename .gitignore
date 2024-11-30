@@ -1,3 +1,11 @@
+# test output
+test/output/*.parquet
+test/output/*.txt
+test/output/*.bin
+test/output/*.pkl
+test/output/*
+test/output/**
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

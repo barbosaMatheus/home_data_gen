@@ -7,7 +7,7 @@ import home_monitoring_data_gen as dg
 from components import __TempSensor__
 
 OUTPUT_BASE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 
-                                                "../../output")
+                                                "output")
 
 # builds a setup with one sensor and runs the
 # entire process through to file output
