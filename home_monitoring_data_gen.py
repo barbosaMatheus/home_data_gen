@@ -28,9 +28,9 @@ CO2_SENSOR_CYCLE_DELAY = 150
 HUMIDITY_SENSOR_DELAY = 100
 TICKS_PER_DAY = 86_400_000
 TICK_SCALE = 1_000
-MAX_DATAFRAME_SIZE = 100_000_000
-MAX_STRING_SIZE = 10_000_000
-MAX_ARRAY_SIZE = 10_000_000
+MAX_DATAFRAME_SIZE = 5_000_000
+MAX_STRING_SIZE = 500_000
+MAX_ARRAY_SIZE = 1_000_000
 MAX_BYTE_RATE = 840                     # estimated peak bytes written per cycle to largest dataframe
 SMOKE_ARRAY_DTYPE = np.dtype("u8, u1, u1, u1, u1, U1")
 
@@ -321,9 +321,9 @@ class HomeMonitoringDataGen():
     # sequence of data from the same source
     def __gen_next_filename__(self, old_name: str):
         # find the tag using regex
-        tag = re.findall(r"\([0-9]+\)", old_name)[-1]
+        tag = re.findall(r"_[0-9]+\.", old_name)[-1]
         # increment index to create new tag
-        new_tag = f"({int(tag[1:-1])+1})"
+        new_tag = f"_{int(tag[1:-1])+1}."
         return old_name.replace(tag, new_tag)
 
 
@@ -431,10 +431,10 @@ class HomeMonitoringDataGen():
             self.topdir_path = topdir
 
             # create data file names
-            self.door_motion_latest_filepath = os.path.join(topdir, f"{name}_door_motion_data(1).parquet")
-            self.temp_data_latest_filepath = os.path.join(topdir, f"{name}_temp_data(1).parquet")
-            self.co2_humidity_latest_filepath = os.path.join(topdir, f"{name}_co2_humidity_data(1).pkl")
-            self.smoke_detector_latest_filepath = os.path.join(topdir, f"{name}_smoke_detector_data(1).bin")
+            self.door_motion_latest_filepath = os.path.join(topdir, f"{name}_door_motion_data_1.parquet")
+            self.temp_data_latest_filepath = os.path.join(topdir, f"{name}_temp_data_1.parquet")
+            self.co2_humidity_latest_filepath = os.path.join(topdir, f"{name}_co2_humidity_data_1.pkl")
+            self.smoke_detector_latest_filepath = os.path.join(topdir, f"{name}_smoke_detector_data_1.bin")
         
         # loop through all time steps
         for i in range(self.total_cycles):
