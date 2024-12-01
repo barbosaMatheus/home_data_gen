@@ -412,7 +412,9 @@ class HomeMonitoringDataGen():
             quiet (bool): if False, will print out some information
                 during sim.
         """
-        # set start time
+        # real start time for sim timing
+        start_time = time()
+        # set start date
         self.current_datetime = self.start_date
 
         # build and reset if needed
@@ -461,7 +463,11 @@ class HomeMonitoringDataGen():
                 # process smoke detector
                 elif sensor_name.startswith("s"):
                     self.__process_smoke_detector_data__(sensor)
-        
+
         # final flush with sim_over flag on to write out all data
         self.__flush__(sim_over=True)
+        if not quiet:
+            total_sim_time = time() - start_time
+            avg_secs_per_cyc = total_sim_time / self.total_cycles
+            print(f"Simulation took {timedelta(seconds=total_sim_time)}, {avg_secs_per_cyc} s/cyc average")
         return self.topdir_path
