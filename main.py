@@ -50,7 +50,7 @@ parser.add_argument("-e", "--estimate", dest="estimate", type=bool,
                     required=False, default=False)
 parser.add_argument("-m", "--mult", dest="multiplier", type=float,
                     help="If estimation is True, this will be used as multiplier",
-                    required=False, default=1.01)
+                    required=False, default=2.0)
 parser.add_argument("-q", "--quiet", dest="quiet", type=bool,
                     help="If True, most output is suppressed while  running the sim",
                     required=False, default=False)

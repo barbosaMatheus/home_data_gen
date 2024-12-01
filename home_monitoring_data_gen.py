@@ -5,7 +5,7 @@ Contains object that generates simulated home monitoring data
 import datetime
 import os
 import re
-from time import time
+from time import time, time_ns
 
 # third party imports
 import numpy as np
@@ -355,7 +355,7 @@ class HomeMonitoringDataGen():
             self.smoke_detector_latest_filepath = self.__gen_next_filename__(self.smoke_detector_latest_filepath)
 
     
-    def estimate(self, force_build: bool = True, multiplier: float = 1.01):
+    def estimate(self, force_build: bool = True, multiplier: float = 2.0):
         """
         Runs low cycles with the current setup to estimate how long the
         full simulation would take. Resets after calculating.
@@ -375,23 +375,22 @@ class HomeMonitoringDataGen():
                                " custom_build(), or run with force_build=True")
             return
         actual_cycles = self.total_cycles
-        avg_sec_per_cyc = 0
+        avg_usec_per_cyc = 0
         n = 30
         for i in range(1, n+1):
             self.total_cycles = i
-            start_time = time()
+            start_time = time_ns()
             self.start(name="estimate", output_dir_base_path=None, 
                        reset=force_build, quiet=True)
-            seconds = time() - start_time
-            avg = seconds / i
-            avg_sec_per_cyc += avg
+            usec = (time_ns() - start_time) / 1000
+            avg = usec / i
+            avg_usec_per_cyc += avg
             self.__reset__()
-            # time_est = datetime.timedelta(seconds=(seconds*actual_cycles*multiplier))
-            print(f"Ran {i} cycle(s) in {seconds:.6f} seconds, {avg:.6f} s/cyc average")
-        estimated = (avg_sec_per_cyc/n)*actual_cycles*multiplier
+            print(f"Ran {i} cycle(s) in {usec/1000:.6f} milliseconds, {avg/1000:.6f} ms/cyc average")
+        estimated = (avg_usec_per_cyc/n)*actual_cycles*multiplier
         self.total_cycles = actual_cycles
         print(f"Estimated time for {actual_cycles} cycles is " +
-              f"{datetime.timedelta(seconds=estimated)}")
+              f"{datetime.timedelta(microseconds=estimated)}")
 
 
     def start(self, name: str, output_dir_base_path: str = "", 
@@ -440,7 +439,7 @@ class HomeMonitoringDataGen():
         # loop through all time steps
         for i in range(self.total_cycles):
             if not quiet:
-                print(f"Cycle {i} of {self.total_cycles}: {str(self.current_datetime)}")
+                print(f"Cycle {i+1} of {self.total_cycles}: {str(self.current_datetime)}")
             # advance the datetime stamp
             self.__advance_time__()
             # check/flush RAM if needed
@@ -469,5 +468,5 @@ class HomeMonitoringDataGen():
         if not quiet:
             total_sim_time = time() - start_time
             avg_secs_per_cyc = total_sim_time / self.total_cycles
-            print(f"Simulation took {timedelta(seconds=total_sim_time)}, {avg_secs_per_cyc} s/cyc average")
+            print(f"Simulation took {datetime.timedelta(seconds=total_sim_time)}, {avg_secs_per_cyc} s/cyc average")
         return self.topdir_path
